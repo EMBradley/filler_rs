@@ -1,11 +1,14 @@
 use std::ops::Index;
 
-use super::cell::{Cell, CellColor, Coordinates, CELL_SIZE};
+use super::cell::{Coordinates, Tile, TileColor, TILE_SIZE};
 use iced::{
     mouse,
-    widget::canvas,
-    widget::canvas::{Frame, Path, Program},
-    Color, Element, Length, Point, Sandbox, Size,
+    widget::{
+        canvas,
+        canvas::{Frame, Path, Program},
+        column, Container,
+    },
+    Color, Element, Length, Padding, Point, Sandbox, Size,
 };
 use rand::prelude::*;
 
@@ -22,16 +25,16 @@ impl Default for Player {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct Grid([[Cell; 8]; 7]);
+pub struct Grid([[Tile; 8]; 7]);
 
 impl Default for Grid {
     fn default() -> Self {
-        Grid([[Cell::default(); 8]; 7])
+        Grid([[Tile::default(); 8]; 7])
     }
 }
 
 impl Index<(usize, usize)> for Grid {
-    type Output = Cell;
+    type Output = Tile;
 
     fn index(&self, index: (usize, usize)) -> &Self::Output {
         &self.0[index.0][index.1]
@@ -45,7 +48,7 @@ pub struct Game {
 }
 
 impl Game {
-    fn get_player_color(&self, player: Player) -> CellColor {
+    fn get_player_color(&self, player: Player) -> TileColor {
         match player {
             Player::One => self.grid[(6, 0)].color,
             Player::Two => self.grid[(0, 7)].color,
@@ -54,19 +57,19 @@ impl Game {
 }
 
 impl Sandbox for Game {
-    type Message = CellColor;
+    type Message = TileColor;
 
     fn new() -> Self {
         let mut rng = thread_rng();
         let cells = Grid(std::array::from_fn(|i| {
-            let row: [Cell; 8] = std::array::from_fn(|j| {
-                let color = CellColor::from(rng.gen_range(0..6));
+            let row: [Tile; 8] = std::array::from_fn(|j| {
+                let color = TileColor::from(rng.gen_range(0..6));
                 let owner = match (i, j) {
                     (6, 0) => Some(Player::One),
                     (0, 7) => Some(Player::Two),
                     _ => None,
                 };
-                Cell {
+                Tile {
                     color,
                     owner,
                     coordinates: Coordinates::new(i, j),
@@ -91,10 +94,13 @@ impl Sandbox for Game {
     }
 
     fn view(&self) -> Element<Self::Message> {
-        canvas(&self.grid)
+        let grid = Container::new(canvas(&self.grid).width(Length::Fill).height(Length::Fill))
             .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+            .height(Length::FillPortion(4))
+            .center_x()
+            .center_y();
+        let controls = Container::new("TODO: Controls");
+        column![grid, controls].into()
     }
 }
 
@@ -115,12 +121,12 @@ impl<Message> Program<Message> for Grid {
         for row in grid {
             for cell in row {
                 let Coordinates { row: i, col: j } = cell.coordinates;
-                let x = j as f32 * CELL_SIZE;
-                let y = i as f32 * CELL_SIZE;
+                let x = j as f32 * TILE_SIZE;
+                let y = i as f32 * TILE_SIZE;
                 let top_left = Point { x, y };
                 let size = Size {
-                    width: CELL_SIZE,
-                    height: CELL_SIZE,
+                    width: TILE_SIZE,
+                    height: TILE_SIZE,
                 };
                 let square = Path::rectangle(top_left, size);
                 frame.fill(&square, Color::from(cell.color));
