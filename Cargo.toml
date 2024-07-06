@@ -1,0 +1,8 @@
+[package]
+name = "filler_rs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+iced = {version="0.12.1", features=["canvas"]}
+rand = "0.8.5"
