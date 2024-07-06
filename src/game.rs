@@ -2,13 +2,13 @@ use super::tile::{
     Coordinates, Grid, Tile, TileColor, COLORS, COL_COUNT, LAST_COL, LAST_ROW, ROW_COUNT,
 };
 use iced::{
-    mouse, theme,
+    mouse,
     widget::{
-        button::{self, Button},
+        button::Button,
         canvas::{self, Canvas, Frame, Path, Program},
         column, row, text, Container,
     },
-    Alignment, Background, Border, Color, Element, Length, Point, Sandbox, Shadow, Size, Vector,
+    Alignment, Color, Element, Length, Padding, Point, Sandbox, Size,
 };
 use rand::prelude::*;
 use std::collections::VecDeque;
@@ -36,33 +36,6 @@ impl Default for Player {
     }
 }
 
-impl button::StyleSheet for TileColor {
-    type Style = iced::Theme;
-
-    fn active(&self, _style: &Self::Style) -> button::Appearance {
-        let color = Color::from(*self);
-        let shadow_offset = Vector::new(0.0, 0.0);
-        let background = Some(Background::Color(color));
-        let text_color = color;
-        let border = Border::default();
-        let shadow = Shadow::default();
-
-        button::Appearance {
-            shadow_offset,
-            background,
-            text_color,
-            border,
-            shadow,
-        }
-    }
-}
-
-impl From<TileColor> for theme::Button {
-    fn from(color: TileColor) -> Self {
-        Self::Custom(Box::new(color))
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 pub struct Game {
     to_play: Player,
@@ -85,13 +58,14 @@ impl Game {
     fn player_tile_coordinates(&self, player: Player) -> Vec<Coordinates> {
         (0..ROW_COUNT)
             .flat_map(|i| {
-                let row = self.grid[i];
-                row.iter()
-                    .filter_map(|tile| match tile.owner {
-                        Some(owner) if owner == player => Some(tile.coordinates),
-                        _ => None,
-                    })
-                    .collect::<Vec<_>>()
+                (0..COL_COUNT).filter_map(move |j| {
+                    let tile = self.grid[i][j];
+                    if tile.owner.is_some_and(|owner| owner == player) {
+                        Some(tile.coordinates)
+                    } else {
+                        None
+                    }
+                })
             })
             .collect()
     }
@@ -194,15 +168,17 @@ impl Sandbox for Game {
             };
             text(format!("{player}'s turn"))
         };
-        let info = row![score_board, to_play].spacing(TILE_SIZE * 6.0);
+        let info = row![score_board, to_play]
+            .spacing(TILE_SIZE * 6.0)
+            .height(Length::FillPortion(1));
 
         let grid = Container::new(
             Canvas::new(&self.grid)
-                .width(Length::Fill)
-                .height(Length::Fill),
+                .width(Length::Fixed(TILE_SIZE * 8.0))
+                .height(Length::Fixed(TILE_SIZE * 7.0)),
         )
         .width(Length::Fill)
-        .height(Length::FillPortion(4))
+        .height(Length::FillPortion(8))
         .center_x()
         .center_y();
 
@@ -223,9 +199,13 @@ impl Sandbox for Game {
             button.into()
         }))
         .align_items(Alignment::Center)
-        .spacing(TILE_SIZE * 0.25);
+        .spacing(TILE_SIZE * 0.25)
+        .height(Length::FillPortion(2));
 
-        column![info, grid, buttons].into()
+        column![info, grid, buttons]
+            .align_items(Alignment::Center)
+            .padding(Padding::from(50.0))
+            .into()
     }
 }
 

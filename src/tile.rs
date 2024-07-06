@@ -1,5 +1,5 @@
 use super::game::Player;
-use iced::{color, Color};
+use iced::{color, theme, widget::button, Background, Border, Color, Shadow, Vector};
 use std::ops::{Index, IndexMut};
 
 pub const ROW_COUNT: usize = 7;
@@ -41,6 +41,33 @@ impl From<TileColor> for Color {
             TileColor::Green => color!(0x3CB043),
             TileColor::Purple => color!(0xA32CC4),
         }
+    }
+}
+
+impl button::StyleSheet for TileColor {
+    type Style = iced::Theme;
+
+    fn active(&self, _style: &Self::Style) -> button::Appearance {
+        let color = Color::from(*self);
+        let shadow_offset = Vector::new(0.0, 0.0);
+        let background = Some(Background::Color(color));
+        let text_color = color;
+        let border = Border::default();
+        let shadow = Shadow::default();
+
+        button::Appearance {
+            shadow_offset,
+            background,
+            text_color,
+            border,
+            shadow,
+        }
+    }
+}
+
+impl From<TileColor> for theme::Button {
+    fn from(color: TileColor) -> Self {
+        Self::Custom(Box::new(color))
     }
 }
 
