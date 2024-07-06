@@ -1,5 +1,6 @@
 use super::game::Player;
 use iced::{color, Color};
+use std::ops::{Index, IndexMut};
 
 pub const TILE_SIZE: f32 = 75.0;
 
@@ -63,4 +64,21 @@ pub struct Tile {
     pub owner: Option<Player>,
     pub color: TileColor,
     pub coordinates: Coordinates,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Grid(pub [[Tile; 8]; 7]);
+
+impl Index<usize> for Grid {
+    type Output = [Tile; 8];
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl IndexMut<usize> for Grid {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.0[index]
+    }
 }
