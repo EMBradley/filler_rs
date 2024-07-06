@@ -2,7 +2,10 @@ use super::game::Player;
 use iced::{color, Color};
 use std::ops::{Index, IndexMut};
 
-pub const TILE_SIZE: f32 = 75.0;
+pub const ROWS: usize = 7;
+pub const COLS: usize = 8;
+pub const LAST_ROW: usize = ROWS - 1;
+pub const LAST_COL: usize = COLS - 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TileColor {
@@ -57,6 +60,29 @@ impl Coordinates {
     pub fn new(row: usize, col: usize) -> Self {
         Self { row, col }
     }
+
+    pub fn get_neighbors(&self) -> Vec<Self> {
+        let &Self { row: i, col: j } = self;
+        let i = i as isize;
+        let j = j as isize;
+        let directions = [(1, 0), (-1, 0), (0, 1), (0, -1)];
+
+        directions
+            .iter()
+            .filter_map(|(delta_i, delta_j)| {
+                let i_new = i + delta_i;
+                let j_new = j + delta_j;
+                if (0..ROWS as isize).contains(&i_new) && (0..COLS as isize).contains(&j_new) {
+                    Some(Coordinates {
+                        row: i_new as usize,
+                        col: j_new as usize,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -68,6 +94,20 @@ pub struct Tile {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Grid(pub [[Tile; 8]; 7]);
+
+impl Index<Coordinates> for Grid {
+    type Output = Tile;
+
+    fn index(&self, coordinates: Coordinates) -> &Self::Output {
+        &self[coordinates.row][coordinates.col]
+    }
+}
+
+impl IndexMut<Coordinates> for Grid {
+    fn index_mut(&mut self, coordinates: Coordinates) -> &mut Self::Output {
+        &mut self[coordinates.row][coordinates.col]
+    }
+}
 
 impl Index<usize> for Grid {
     type Output = [Tile; 8];

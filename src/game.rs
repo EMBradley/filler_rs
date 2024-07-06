@@ -1,4 +1,6 @@
-use super::tile::{Coordinates, Grid, Tile, TileColor, TILE_SIZE};
+use std::collections::VecDeque;
+
+use super::tile::{Coordinates, Grid, Tile, TileColor, COLS, LAST_COL, LAST_ROW, ROWS};
 use iced::{
     mouse, theme,
     widget::{
@@ -10,10 +12,21 @@ use iced::{
 };
 use rand::prelude::*;
 
-#[derive(Debug, Clone, Copy)]
+pub const TILE_SIZE: f32 = 75.0;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Player {
     One,
     Two,
+}
+
+impl Player {
+    fn alternate(&self) -> Self {
+        match self {
+            Player::One => Player::Two,
+            Player::Two => Player::One,
+        }
+    }
 }
 
 impl Default for Player {
@@ -52,20 +65,39 @@ impl From<TileColor> for theme::Button {
 #[derive(Debug, Clone, Copy)]
 pub struct Game {
     to_play: Player,
-    pub grid: Grid,
+    grid: Grid,
 }
 
 impl Game {
-    fn get_player_color(&self, player: Player) -> TileColor {
+    fn player_start_tile(&self, player: Player) -> Tile {
         match player {
-            Player::One => self.grid[6][0].color,
-            Player::Two => self.grid[0][7].color,
+            Player::One => self.grid[LAST_ROW][0],
+            Player::Two => self.grid[0][LAST_COL],
         }
     }
+
+    fn player_color(&self, player: Player) -> TileColor {
+        self.player_start_tile(player).color
+    }
+
+    fn player_tile_coordinates(&self, player: Player) -> Vec<Coordinates> {
+        (0..ROWS)
+            .flat_map(|i| {
+                let row = self.grid[i];
+                row.iter()
+                    .filter_map(|tile| match tile.owner {
+                        Some(owner) if owner == player => Some(tile.coordinates),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    }
+
     fn disabled_colors(&self) -> [TileColor; 2] {
         [
-            self.get_player_color(Player::One),
-            self.get_player_color(Player::Two),
+            self.player_color(Player::One),
+            self.player_color(Player::Two),
         ]
     }
 }
@@ -78,11 +110,11 @@ impl Sandbox for Game {
         // and assigning the top right tile to player two
         let mut rng = thread_rng();
         let mut tiles = Grid(std::array::from_fn(|i| {
-            let row: [Tile; 8] = std::array::from_fn(|j| {
+            let row: [Tile; COLS] = std::array::from_fn(|j| {
                 let color = TileColor::from(rng.gen_range(0..6));
                 let owner = match (i, j) {
-                    (6, 0) => Some(Player::One),
-                    (0, 7) => Some(Player::Two),
+                    (LAST_ROW, 0) => Some(Player::One),
+                    (0, LAST_COL) => Some(Player::Two),
                     _ => None,
                 };
                 Tile {
@@ -95,13 +127,13 @@ impl Sandbox for Game {
         }));
 
         // Ensure that player 1 and player 2 have different colors
-        if tiles[6][0].color == tiles[0][7].color {
+        if tiles[LAST_ROW][0].color == tiles[0][LAST_COL].color {
             let available_colors = (0..6)
                 .map(TileColor::from)
-                .filter(|&color| color != tiles[6][0].color)
+                .filter(|&color| color != tiles[LAST_ROW][0].color)
                 .collect::<Vec<_>>();
             let i = rng.gen_range(0..available_colors.len());
-            tiles[0][7].color = available_colors[i];
+            tiles[0][LAST_COL].color = available_colors[i];
         }
 
         Self {
@@ -115,8 +147,27 @@ impl Sandbox for Game {
     }
 
     fn update(&mut self, message: Self::Message) {
-        assert_ne!(message, self.get_player_color(Player::One));
-        assert_ne!(message, self.get_player_color(Player::Two));
+        assert_ne!(message, self.player_color(Player::One));
+        assert_ne!(message, self.player_color(Player::Two));
+
+        let mut update_queue = VecDeque::from(self.player_tile_coordinates(self.to_play));
+
+        while let Some(coordinates) = update_queue.pop_front() {
+            if self.grid[coordinates].owner == Some(self.to_play) {
+                self.grid[coordinates].color = message;
+            } else {
+                self.grid[coordinates].owner = Some(self.to_play);
+            }
+
+            let neighbors = coordinates.get_neighbors();
+            let neighbors_to_update = neighbors.iter().copied().filter(|&neighbor_coordinates| {
+                self.grid[neighbor_coordinates].color == message
+                    && self.grid[neighbor_coordinates].owner.is_none()
+            });
+            update_queue.extend(neighbors_to_update);
+        }
+
+        self.to_play = self.to_play.alternate();
     }
 
     fn view(&self) -> Element<Self::Message> {
@@ -194,8 +245,8 @@ mod tests {
         for _ in 0..100 {
             let game = Game::new();
             assert_ne!(
-                game.get_player_color(Player::One),
-                game.get_player_color(Player::Two)
+                game.player_color(Player::One),
+                game.player_color(Player::Two)
             );
         }
     }
