@@ -1,4 +1,6 @@
-use super::tile::{Coordinates, Grid, Tile, TileColor, COLS, LAST_COL, LAST_ROW, ROWS};
+use super::tile::{
+    Coordinates, Grid, Tile, TileColor, COLORS, COL_COUNT, LAST_COL, LAST_ROW, ROW_COUNT,
+};
 use iced::{
     mouse, theme,
     widget::{
@@ -81,7 +83,7 @@ impl Game {
     }
 
     fn player_tile_coordinates(&self, player: Player) -> Vec<Coordinates> {
-        (0..ROWS)
+        (0..ROW_COUNT)
             .flat_map(|i| {
                 let row = self.grid[i];
                 row.iter()
@@ -109,42 +111,38 @@ impl Sandbox for Game {
         // Generate a grid of randomly colored tiles, assigning the bottom left tile to player one
         // and assigning the top right tile to player two
         let mut rng = thread_rng();
-        let mut tiles = Grid(std::array::from_fn(|i| {
-            let row: [Tile; COLS] = std::array::from_fn(|j| {
-                let color = TileColor::from(rng.gen_range(0..6));
-                let owner = match (i, j) {
+        let mut tiles = Grid::default();
+
+        for row in 0..ROW_COUNT {
+            for col in 0..COL_COUNT {
+                let coordinates = Coordinates::new(row, col);
+                let available_colors = COLORS.into_iter().filter(|&color| {
+                    (row == 0 || color != tiles[row - 1][col].color)
+                        && (col == 0 || color != tiles[row][col - 1].color)
+                });
+                let color = available_colors.choose(&mut rng).unwrap();
+                let owner = match (row, col) {
                     (LAST_ROW, 0) => Some(Player::One),
                     (0, LAST_COL) => Some(Player::Two),
                     _ => None,
                 };
-                Tile {
+                let tile = Tile {
                     color,
                     owner,
-                    coordinates: Coordinates::new(i, j),
-                }
-            });
-            row
-        }));
-
-        // Ensure that player 1 and player 2 have different colors,
-        // and that each player starts with just their corner square
-        let must_be_different_colors = [
-            ((LAST_ROW, 0), (0, LAST_COL)),
-            ((LAST_ROW, 0), (LAST_ROW, 1)),
-            ((LAST_ROW, 0), (LAST_ROW - 1, 0)),
-            ((0, LAST_COL), (1, LAST_COL)),
-            ((0, LAST_COL), (0, LAST_COL - 1)),
-        ];
-
-        for ((i, j), (k, l)) in must_be_different_colors {
-            if tiles[i][j].color == tiles[k][l].color {
-                let available_colors = (0..6)
-                    .map(TileColor::from)
-                    .filter(|&color| color != tiles[i][j].color)
-                    .collect::<Vec<_>>();
-                tiles[k][l].color = *available_colors.choose(&mut rng).unwrap();
+                    coordinates,
+                };
+                tiles[coordinates] = tile;
             }
         }
+
+        // Ensure that player 1 and player 2 have different colors
+        let available_colors = COLORS.into_iter().filter(|&color| {
+            color != tiles[0][LAST_COL].color
+                && color != tiles[LAST_ROW][1].color
+                && color != tiles[LAST_ROW - 1][0].color
+        });
+        let color = available_colors.choose(&mut rng).unwrap();
+        tiles[LAST_ROW][0].color = color;
 
         Self {
             to_play: Player::One,
@@ -207,8 +205,8 @@ impl Sandbox for Game {
         .height(Length::FillPortion(4))
         .center_x()
         .center_y();
-        let buttons = row((0..6).map(|n| {
-            let color = TileColor::from(n);
+
+        let buttons = row(COLORS.into_iter().map(|color| {
             let is_enabled = !self.disabled_colors().contains(&color);
             let message = if is_enabled { Some(color) } else { None };
             let size = if is_enabled {
@@ -226,6 +224,7 @@ impl Sandbox for Game {
         }))
         .align_items(Alignment::Center)
         .spacing(TILE_SIZE * 0.25);
+
         column![info, grid, buttons].into()
     }
 }
@@ -265,7 +264,7 @@ impl<Message> Program<Message> for Grid {
 
 #[cfg(test)]
 mod tests {
-    use super::{Game, Player, Sandbox, LAST_COL, LAST_ROW};
+    use super::{Game, Player, Sandbox, ROW_COUNT};
 
     #[test]
     fn test_players_start_different_colors() {
@@ -279,19 +278,18 @@ mod tests {
     }
 
     #[test]
-    fn test_players_start_with_one_tile() {
+    fn test_adjacent_tiles_start_different_colors() {
         for _ in 0..100 {
             let game = Game::new();
-            assert_ne!(game.player_color(Player::One), game.grid[LAST_ROW][1].color);
-            assert_ne!(
-                game.player_color(Player::One),
-                game.grid[LAST_ROW - 1][0].color
-            );
-            assert_ne!(game.player_color(Player::Two), game.grid[1][LAST_COL].color);
-            assert_ne!(
-                game.player_color(Player::Two),
-                game.grid[0][LAST_COL - 1].color
-            );
+            for row in 0..ROW_COUNT {
+                for cell in game.grid[row] {
+                    let color = cell.color;
+                    for neighbor_coordinates in cell.coordinates.get_neighbors() {
+                        let neighbor_color = game.grid[neighbor_coordinates].color;
+                        assert_ne!(color, neighbor_color);
+                    }
+                }
+            }
         }
     }
 }
