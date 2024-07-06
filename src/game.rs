@@ -1,16 +1,15 @@
-use std::collections::VecDeque;
-
 use super::tile::{Coordinates, Grid, Tile, TileColor, COLS, LAST_COL, LAST_ROW, ROWS};
 use iced::{
     mouse, theme,
     widget::{
         button::{self, Button},
         canvas::{self, Canvas, Frame, Path, Program},
-        column, row, Container,
+        column, row, text, Container,
     },
     Alignment, Background, Border, Color, Element, Length, Point, Sandbox, Shadow, Size, Vector,
 };
 use rand::prelude::*;
+use std::collections::VecDeque;
 
 pub const TILE_SIZE: f32 = 75.0;
 
@@ -65,6 +64,7 @@ impl From<TileColor> for theme::Button {
 #[derive(Debug, Clone, Copy)]
 pub struct Game {
     to_play: Player,
+    score: (usize, usize),
     grid: Grid,
 }
 
@@ -126,18 +126,29 @@ impl Sandbox for Game {
             row
         }));
 
-        // Ensure that player 1 and player 2 have different colors
-        if tiles[LAST_ROW][0].color == tiles[0][LAST_COL].color {
-            let available_colors = (0..6)
-                .map(TileColor::from)
-                .filter(|&color| color != tiles[LAST_ROW][0].color)
-                .collect::<Vec<_>>();
-            let i = rng.gen_range(0..available_colors.len());
-            tiles[0][LAST_COL].color = available_colors[i];
+        // Ensure that player 1 and player 2 have different colors,
+        // and that each player starts with just their corner square
+        let must_be_different_colors = [
+            ((LAST_ROW, 0), (0, LAST_COL)),
+            ((LAST_ROW, 0), (LAST_ROW, 1)),
+            ((LAST_ROW, 0), (LAST_ROW - 1, 0)),
+            ((0, LAST_COL), (1, LAST_COL)),
+            ((0, LAST_COL), (0, LAST_COL - 1)),
+        ];
+
+        for ((i, j), (k, l)) in must_be_different_colors {
+            if tiles[i][j].color == tiles[k][l].color {
+                let available_colors = (0..6)
+                    .map(TileColor::from)
+                    .filter(|&color| color != tiles[i][j].color)
+                    .collect::<Vec<_>>();
+                tiles[k][l].color = *available_colors.choose(&mut rng).unwrap();
+            }
         }
 
         Self {
             to_play: Player::One,
+            score: (1, 1),
             grid: tiles,
         }
     }
@@ -167,10 +178,26 @@ impl Sandbox for Game {
             update_queue.extend(neighbors_to_update);
         }
 
+        let new_score = self.player_tile_coordinates(self.to_play).iter().count();
+        self.score = match self.to_play {
+            Player::One => (new_score, self.score.1),
+            Player::Two => (self.score.0, new_score),
+        };
+
         self.to_play = self.to_play.alternate();
     }
 
     fn view(&self) -> Element<Self::Message> {
+        let score_board = text(format!("{0} | {1}", self.score.0, self.score.1));
+        let to_play = {
+            let player = match self.to_play {
+                Player::One => "Player 1",
+                Player::Two => "Player 2",
+            };
+            text(format!("{player}'s turn"))
+        };
+        let info = row![score_board, to_play].spacing(TILE_SIZE * 6.0);
+
         let grid = Container::new(
             Canvas::new(&self.grid)
                 .width(Length::Fill)
@@ -198,8 +225,8 @@ impl Sandbox for Game {
             button.into()
         }))
         .align_items(Alignment::Center)
-        .spacing(10.0);
-        column![grid, buttons].into()
+        .spacing(TILE_SIZE * 0.25);
+        column![info, grid, buttons].into()
     }
 }
 
@@ -238,7 +265,7 @@ impl<Message> Program<Message> for Grid {
 
 #[cfg(test)]
 mod tests {
-    use super::{Game, Player, Sandbox};
+    use super::{Game, Player, Sandbox, LAST_COL, LAST_ROW};
 
     #[test]
     fn test_players_start_different_colors() {
@@ -247,6 +274,23 @@ mod tests {
             assert_ne!(
                 game.player_color(Player::One),
                 game.player_color(Player::Two)
+            );
+        }
+    }
+
+    #[test]
+    fn test_players_start_with_one_tile() {
+        for _ in 0..100 {
+            let game = Game::new();
+            assert_ne!(game.player_color(Player::One), game.grid[LAST_ROW][1].color);
+            assert_ne!(
+                game.player_color(Player::One),
+                game.grid[LAST_ROW - 1][0].color
+            );
+            assert_ne!(game.player_color(Player::Two), game.grid[1][LAST_COL].color);
+            assert_ne!(
+                game.player_color(Player::Two),
+                game.grid[0][LAST_COL - 1].color
             );
         }
     }
