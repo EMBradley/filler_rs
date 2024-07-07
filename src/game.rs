@@ -3,7 +3,8 @@ use iced::{
     advanced::graphics::core::font,
     alignment::Horizontal,
     widget::{
-        button::Button, canvas::Canvas, column, responsive, row, text, Responsive, Row, Space,
+        button::Button, canvas::Canvas, column, responsive, row, text, Container, Responsive, Row,
+        Space,
     },
     Alignment, Element, Length, Padding, Sandbox,
 };
@@ -30,6 +31,21 @@ enum GameStatus {
     Incomplete,
     Won(Player),
     Draw,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GameMessage {
+    PlayAgain,
+    Move(TileColor),
+}
+
+impl ToString for GameMessage {
+    fn to_string(&self) -> String {
+        match *self {
+            Self::PlayAgain => format!("Play Again"),
+            Self::Move(color) => format!("{color:?}"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -86,7 +102,7 @@ impl Game {
         }
     }
 
-    fn create_info_bar(&self) -> Row<TileColor> {
+    fn create_info_bar(&self) -> Row<GameMessage> {
         let game_status = self.status();
 
         let font = {
@@ -95,7 +111,17 @@ impl Game {
             font
         };
 
-        let spacer = Space::with_width(Length::Fill);
+        let middle = if let GameStatus::Incomplete = game_status {
+            Element::from(Space::with_width(Length::Fill))
+        } else {
+            let reset_button = Button::new("Play Again").on_press(GameMessage::PlayAgain);
+            Element::from(
+                Container::new(reset_button)
+                    .width(Length::Fill)
+                    .center_x()
+                    .center_y(),
+            )
+        };
 
         let score_board = text(format!("Score: {0} | {1}", self.score.0, self.score.1))
             .size(25.0)
@@ -121,13 +147,13 @@ impl Game {
                 .horizontal_alignment(Horizontal::Center)
         };
 
-        row![score_board, spacer, status_text]
+        row![score_board, middle, status_text]
             .padding(Padding::from([0.0, 50.0]))
             .height(Length::FillPortion(1))
             .width(Length::Fill)
     }
 
-    fn create_buttons(&self) -> Responsive<TileColor> {
+    fn create_buttons(&self) -> Responsive<GameMessage> {
         responsive(|size| {
             let game_in_progress = matches![self.status(), GameStatus::Incomplete];
             let max_tile_width = size.width / 6.0;
@@ -156,7 +182,11 @@ impl Game {
 
             let buttons = TileColor::ALL.into_iter().map(|color| {
                 let is_enabled = game_in_progress && !self.disabled_colors().contains(&color);
-                let message = if is_enabled { Some(color) } else { None };
+                let message = if is_enabled {
+                    Some(GameMessage::Move(color))
+                } else {
+                    None
+                };
                 let size = if is_enabled {
                     tile_size
                 } else {
@@ -177,7 +207,7 @@ impl Game {
 }
 
 impl Sandbox for Game {
-    type Message = TileColor;
+    type Message = GameMessage;
 
     fn new() -> Self {
         // Generate a grid of randomly colored tiles, assigning the bottom left tile to player one
@@ -223,8 +253,13 @@ impl Sandbox for Game {
     }
 
     fn update(&mut self, message: Self::Message) {
-        assert_ne!(message, self.player_color(Player::One));
-        assert_ne!(message, self.player_color(Player::Two));
+        let GameMessage::Move(color) = message else {
+            *self = Self::new();
+            return;
+        };
+
+        assert_ne!(color, self.player_color(Player::One));
+        assert_ne!(color, self.player_color(Player::Two));
 
         let mut new_score = match self.current_player {
             Player::One => self.score.0,
@@ -232,11 +267,11 @@ impl Sandbox for Game {
         };
 
         for coordinates in self.player_tile_coordinates(self.current_player) {
-            self.grid[coordinates].color = message;
+            self.grid[coordinates].color = color;
 
             for neighbor_coordinates in coordinates.neighbors() {
                 let neighbor = &mut self.grid[neighbor_coordinates];
-                if neighbor.color == message && neighbor.owner.is_none() {
+                if neighbor.color == color && neighbor.owner.is_none() {
                     neighbor.owner = Some(self.current_player);
                     new_score += 1;
                 }
@@ -270,7 +305,7 @@ impl Sandbox for Game {
 
 #[cfg(test)]
 mod tests {
-    use super::{Coordinates, Game, GameStatus, Grid, Player, Sandbox, TileColor};
+    use super::{Coordinates, Game, GameMessage, GameStatus, Grid, Player, Sandbox, TileColor};
     use rand::prelude::*;
 
     #[test]
@@ -316,7 +351,9 @@ mod tests {
                 let available_colors = TileColor::ALL
                     .iter()
                     .filter(|color| !disabled_colors.contains(color));
-                game.update(*available_colors.choose(&mut rng).unwrap());
+                game.update(GameMessage::Move(
+                    *available_colors.choose(&mut rng).unwrap(),
+                ));
 
                 let expected_score = (
                     expensive_get_score(game, Player::One),
