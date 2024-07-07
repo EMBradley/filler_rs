@@ -115,10 +115,10 @@ impl Sandbox for Game {
     }
 
     fn update(&mut self, message: Self::Message) {
-        assert_ne!(message, self.player_color(Player::One));
-        assert_ne!(message, self.player_color(Player::Two));
+        debug_assert_ne!(message, self.player_color(Player::One));
+        debug_assert_ne!(message, self.player_color(Player::Two));
 
-       for coordinates in self.player_tile_coordinates(self.current_player) {
+        for coordinates in self.player_tile_coordinates(self.current_player) {
             self.grid[coordinates].color = message;
 
             for neighbor_coordinates in coordinates.neighbors() {
