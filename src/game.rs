@@ -1,19 +1,11 @@
-use super::tile::{
-    Coordinates, Grid, Tile, TileColor, COLORS, COL_COUNT, LAST_COL, LAST_ROW, ROW_COUNT,
-};
+use super::grid::{Coordinates, Grid, Tile, TileColor};
 use iced::{
-    mouse,
-    widget::{
-        button::Button,
-        canvas::{self, Canvas, Frame, Path, Program},
-        column, row, text, Container,
-    },
-    Alignment, Color, Element, Length, Padding, Point, Sandbox, Size,
+    widget::{button::Button, canvas::Canvas, column, row, text, Container},
+    Alignment, Element, Length, Padding, Sandbox,
 };
 use rand::prelude::*;
-use std::collections::VecDeque;
 
-pub const TILE_SIZE: f32 = 75.0;
+const TILE_SIZE: f32 = 75.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Player {
@@ -22,7 +14,7 @@ pub enum Player {
 }
 
 impl Player {
-    fn alternate(&self) -> Self {
+    fn alternate(self) -> Self {
         match self {
             Player::One => Player::Two,
             Player::Two => Player::One,
@@ -30,15 +22,9 @@ impl Player {
     }
 }
 
-impl Default for Player {
-    fn default() -> Self {
-        Player::One
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 pub struct Game {
-    to_play: Player,
+    current_player: Player,
     score: (usize, usize),
     grid: Grid,
 }
@@ -46,8 +32,8 @@ pub struct Game {
 impl Game {
     fn player_start_tile(&self, player: Player) -> Tile {
         match player {
-            Player::One => self.grid[LAST_ROW][0],
-            Player::Two => self.grid[0][LAST_COL],
+            Player::One => self.grid[Grid::LAST_ROW][0],
+            Player::Two => self.grid[0][Grid::LAST_COL],
         }
     }
 
@@ -56,11 +42,11 @@ impl Game {
     }
 
     fn player_tile_coordinates(&self, player: Player) -> Vec<Coordinates> {
-        (0..ROW_COUNT)
-            .flat_map(|i| {
-                (0..COL_COUNT).filter_map(move |j| {
-                    let tile = self.grid[i][j];
-                    if tile.owner.is_some_and(|owner| owner == player) {
+        self.grid
+            .into_iter()
+            .flat_map(|row| {
+                row.into_iter().filter_map(|tile| {
+                    if tile.owner? == player {
                         Some(tile.coordinates)
                     } else {
                         None
@@ -87,39 +73,38 @@ impl Sandbox for Game {
         let mut rng = thread_rng();
         let mut tiles = Grid::default();
 
-        for row in 0..ROW_COUNT {
-            for col in 0..COL_COUNT {
-                let coordinates = Coordinates::new(row, col);
-                let available_colors = COLORS.into_iter().filter(|&color| {
+        for row in 0..Grid::ROW_COUNT {
+            for col in 0..Grid::COL_COUNT {
+                let available_colors = TileColor::ALL.into_iter().filter(|&color| {
                     (row == 0 || color != tiles[row - 1][col].color)
                         && (col == 0 || color != tiles[row][col - 1].color)
                 });
                 let color = available_colors.choose(&mut rng).unwrap();
                 let owner = match (row, col) {
-                    (LAST_ROW, 0) => Some(Player::One),
-                    (0, LAST_COL) => Some(Player::Two),
+                    (Grid::LAST_ROW, 0) => Some(Player::One),
+                    (0, Grid::LAST_COL) => Some(Player::Two),
                     _ => None,
                 };
-                let tile = Tile {
-                    color,
+
+                tiles[row][col] = Tile {
                     owner,
-                    coordinates,
+                    color,
+                    coordinates: Coordinates::new(row, col),
                 };
-                tiles[coordinates] = tile;
             }
         }
 
         // Ensure that player 1 and player 2 have different colors
-        let available_colors = COLORS.into_iter().filter(|&color| {
-            color != tiles[0][LAST_COL].color
-                && color != tiles[LAST_ROW][1].color
-                && color != tiles[LAST_ROW - 1][0].color
+        let available_colors = TileColor::ALL.into_iter().filter(|&color| {
+            color != tiles[0][Grid::LAST_COL].color
+                && color != tiles[Grid::LAST_ROW][1].color
+                && color != tiles[Grid::LAST_ROW - 1][0].color
         });
         let color = available_colors.choose(&mut rng).unwrap();
-        tiles[LAST_ROW][0].color = color;
+        tiles[Grid::LAST_ROW][0].color = color;
 
         Self {
-            to_play: Player::One,
+            current_player: Player::One,
             score: (1, 1),
             grid: tiles,
         }
@@ -133,36 +118,38 @@ impl Sandbox for Game {
         assert_ne!(message, self.player_color(Player::One));
         assert_ne!(message, self.player_color(Player::Two));
 
-        let mut update_queue = VecDeque::from(self.player_tile_coordinates(self.to_play));
+        let mut update_stack = self.player_tile_coordinates(self.current_player);
 
-        while let Some(coordinates) = update_queue.pop_front() {
-            if self.grid[coordinates].owner == Some(self.to_play) {
-                self.grid[coordinates].color = message;
+        while let Some(coordinates) = update_stack.pop() {
+            let tile = &mut self.grid[coordinates];
+
+            if tile.owner == Some(self.current_player) {
+                tile.color = message;
             } else {
-                self.grid[coordinates].owner = Some(self.to_play);
+                tile.owner = Some(self.current_player);
             }
 
-            let neighbors = coordinates.get_neighbors();
+            let neighbors = coordinates.neighbors();
             let neighbors_to_update = neighbors.iter().copied().filter(|&neighbor_coordinates| {
-                self.grid[neighbor_coordinates].color == message
-                    && self.grid[neighbor_coordinates].owner.is_none()
+                let neighbor = self.grid[neighbor_coordinates];
+                neighbor.color == message && neighbor.owner.is_none()
             });
-            update_queue.extend(neighbors_to_update);
+            update_stack.extend(neighbors_to_update);
         }
 
-        let new_score = self.player_tile_coordinates(self.to_play).iter().count();
-        self.score = match self.to_play {
+        let new_score = self.player_tile_coordinates(self.current_player).len();
+        self.score = match self.current_player {
             Player::One => (new_score, self.score.1),
             Player::Two => (self.score.0, new_score),
         };
 
-        self.to_play = self.to_play.alternate();
+        self.current_player = self.current_player.alternate();
     }
 
     fn view(&self) -> Element<Self::Message> {
-        let score_board = text(format!("{0} | {1}", self.score.0, self.score.1));
+        let score_board = text(format!("Score: {0} | {1}", self.score.0, self.score.1));
         let to_play = {
-            let player = match self.to_play {
+            let player = match self.current_player {
                 Player::One => "Player 1",
                 Player::Two => "Player 2",
             };
@@ -174,15 +161,15 @@ impl Sandbox for Game {
 
         let grid = Container::new(
             Canvas::new(&self.grid)
-                .width(Length::Fixed(TILE_SIZE * 8.0))
-                .height(Length::Fixed(TILE_SIZE * 7.0)),
+                .width(Length::Fill)
+                .height(Length::Fill),
         )
         .width(Length::Fill)
         .height(Length::FillPortion(8))
         .center_x()
         .center_y();
 
-        let buttons = row(COLORS.into_iter().map(|color| {
+        let buttons = row(TileColor::ALL.into_iter().map(|color| {
             let is_enabled = !self.disabled_colors().contains(&color);
             let message = if is_enabled { Some(color) } else { None };
             let size = if is_enabled {
@@ -200,51 +187,19 @@ impl Sandbox for Game {
         }))
         .align_items(Alignment::Center)
         .spacing(TILE_SIZE * 0.25)
-        .height(Length::FillPortion(2));
+        .height(Length::FillPortion(2))
+        .width(Length::Shrink);
 
         column![info, grid, buttons]
             .align_items(Alignment::Center)
-            .padding(Padding::from(50.0))
+            .padding(Padding::from(25.0))
             .into()
-    }
-}
-
-impl<Message> Program<Message> for Grid {
-    type State = ();
-
-    fn draw(
-        &self,
-        _state: &Self::State,
-        renderer: &iced::Renderer,
-        _theme: &iced::Theme,
-        bounds: iced::Rectangle,
-        _cursor: mouse::Cursor,
-    ) -> Vec<<iced::Renderer as canvas::Renderer>::Geometry> {
-        let mut frame = Frame::new(renderer, bounds.size());
-        let Grid(grid) = self;
-
-        for row in grid {
-            for cell in row {
-                let Coordinates { row: i, col: j } = cell.coordinates;
-                let x = j as f32 * TILE_SIZE;
-                let y = i as f32 * TILE_SIZE;
-                let top_left = Point { x, y };
-                let size = Size {
-                    width: TILE_SIZE,
-                    height: TILE_SIZE,
-                };
-                let square = Path::rectangle(top_left, size);
-                frame.fill(&square, Color::from(cell.color));
-            }
-        }
-
-        vec![frame.into_geometry()]
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Game, Player, Sandbox, ROW_COUNT};
+    use super::{Game, Player, Sandbox};
 
     #[test]
     fn test_players_start_different_colors() {
@@ -261,10 +216,10 @@ mod tests {
     fn test_adjacent_tiles_start_different_colors() {
         for _ in 0..100 {
             let game = Game::new();
-            for row in 0..ROW_COUNT {
-                for cell in game.grid[row] {
+            for row in game.grid {
+                for cell in row {
                     let color = cell.color;
-                    for neighbor_coordinates in cell.coordinates.get_neighbors() {
+                    for neighbor_coordinates in cell.coordinates.neighbors() {
                         let neighbor_color = game.grid[neighbor_coordinates].color;
                         assert_ne!(color, neighbor_color);
                     }
