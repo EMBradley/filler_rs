@@ -122,28 +122,40 @@ impl Game {
         };
 
         row![score_board, spacer, status_text]
+            .padding(Padding::from([0.0, 50.0]))
             .height(Length::FillPortion(1))
             .width(Length::Fill)
     }
 
     fn create_buttons(&self) -> Responsive<TileColor> {
         responsive(|size| {
+            let game_in_progress = matches![self.status(), GameStatus::Incomplete];
             let max_tile_width = size.width / 6.0;
             let max_tile_height = size.height;
             let tile_size = max_tile_width.min(max_tile_height);
 
-            let total_button_width = (tile_size * 1.25) * 4.0 + (tile_size * 2.0);
+            let total_button_width = if game_in_progress {
+                tile_size * 7.0
+            } else {
+                tile_size * 6.0
+            };
             let spacer_width = (size.width - total_button_width) / 2.0;
-
             let left_spacer = Space::with_width(spacer_width);
             let right_spacer = Space::with_width(spacer_width);
 
+            let padding = if game_in_progress {
+                0.0
+            } else {
+                tile_size * 0.125
+            };
+
             let button_row = row![left_spacer]
                 .spacing(tile_size * 0.25)
+                .padding(padding)
                 .align_items(Alignment::Center);
 
             let buttons = TileColor::ALL.into_iter().map(|color| {
-                let is_enabled = !self.disabled_colors().contains(&color);
+                let is_enabled = game_in_progress && !self.disabled_colors().contains(&color);
                 let message = if is_enabled { Some(color) } else { None };
                 let size = if is_enabled {
                     tile_size
@@ -211,8 +223,8 @@ impl Sandbox for Game {
     }
 
     fn update(&mut self, message: Self::Message) {
-        debug_assert_ne!(message, self.player_color(Player::One));
-        debug_assert_ne!(message, self.player_color(Player::Two));
+        assert_ne!(message, self.player_color(Player::One));
+        assert_ne!(message, self.player_color(Player::Two));
 
         let mut new_score = match self.current_player {
             Player::One => self.score.0,
