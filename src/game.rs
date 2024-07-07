@@ -1,6 +1,7 @@
 use super::grid::{Coordinates, Grid, Tile, TileColor};
 use iced::{
-    widget::{button::Button, canvas::Canvas, column, row, text, Container},
+    advanced::graphics::core::font,
+    widget::{button::Button, canvas::Canvas, column, row, text, Container, Space},
     Alignment, Element, Length, Padding, Sandbox,
 };
 use rand::prelude::*;
@@ -22,10 +23,18 @@ impl Player {
     }
 }
 
+#[derive(Debug, Default, Clone, Copy)]
+enum GameStatus {
+    #[default]
+    Incomplete,
+    Won(Player),
+    Draw,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct Game {
     current_player: Player,
-    score: (usize, usize),
+    score: (u8, u8),
     grid: Grid,
 }
 
@@ -42,12 +51,13 @@ impl Game {
     }
 
     fn player_tile_coordinates(&self, player: Player) -> Vec<Coordinates> {
-        self.grid
-            .into_iter()
+        (0..Grid::ROW_COUNT)
             .flat_map(|row| {
-                row.into_iter().filter_map(|tile| {
+                (0..Grid::COL_COUNT).filter_map(move |col| {
+                    let coordinates = Coordinates::new(row, col);
+                    let tile = self.grid[coordinates];
                     if tile.owner? == player {
-                        Some(tile.coordinates)
+                        Some(coordinates)
                     } else {
                         None
                     }
@@ -61,6 +71,18 @@ impl Game {
             self.player_color(Player::One),
             self.player_color(Player::Two),
         ]
+    }
+
+    fn status(&self) -> GameStatus {
+        if usize::from(self.score.0 + self.score.1) < Grid::ROW_COUNT * Grid::COL_COUNT {
+            GameStatus::Incomplete
+        } else if self.score.0 > self.score.1 {
+            GameStatus::Won(Player::One)
+        } else if self.score.0 < self.score.1 {
+            GameStatus::Won(Player::Two)
+        } else {
+            GameStatus::Draw
+        }
     }
 }
 
@@ -86,11 +108,7 @@ impl Sandbox for Game {
                     _ => None,
                 };
 
-                tiles[row][col] = Tile {
-                    owner,
-                    color,
-                    coordinates: Coordinates::new(row, col),
-                };
+                tiles[row][col] = Tile { owner, color };
             }
         }
 
@@ -159,11 +177,11 @@ impl Sandbox for Game {
                 Player::One => "Player 1",
                 Player::Two => "Player 2",
             };
-            text(format!("{player}'s turn"))
+            text(format!("{player}'s turn")).size(25.0).font(font)
         };
-        let info = row![score_board, to_play]
-            .spacing(TILE_SIZE * 6.0)
-            .height(Length::FillPortion(1));
+        let info = row![score_board, info_spacer, turn_indicator]
+            .height(Length::FillPortion(1))
+            .width(Length::Fill);
 
         let grid = Container::new(
             Canvas::new(&self.grid)
@@ -190,7 +208,6 @@ impl Sandbox for Game {
                 .style(color)
                 .on_press_maybe(message);
             button.into()
-            .spacing(25.0)
         }))
         .align_items(Alignment::Center)
         .spacing(TILE_SIZE * 0.25)
@@ -200,13 +217,15 @@ impl Sandbox for Game {
         column![info, grid, buttons]
             .align_items(Alignment::Center)
             .padding(Padding::from(25.0))
+            .spacing(25.0)
             .into()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Game, Player, Sandbox};
+    use super::{Coordinates, Game, GameStatus, Grid, Player, Sandbox, TileColor};
+    use rand::prelude::*;
 
     #[test]
     fn test_players_start_different_colors() {
@@ -223,10 +242,11 @@ mod tests {
     fn test_adjacent_tiles_start_different_colors() {
         for _ in 0..100 {
             let game = Game::new();
-            for row in game.grid {
-                for cell in row {
-                    let color = cell.color;
-                    for neighbor_coordinates in cell.coordinates.neighbors() {
+            for i in 0..Grid::ROW_COUNT {
+                for j in 0..Grid::COL_COUNT {
+                    let coordinates = Coordinates::new(i, j);
+                    let color = game.grid[coordinates].color;
+                    for neighbor_coordinates in coordinates.neighbors() {
                         let neighbor_color = game.grid[neighbor_coordinates].color;
                         assert_ne!(color, neighbor_color);
                     }
@@ -237,8 +257,9 @@ mod tests {
 
     #[test]
     fn test_score_update() {
-        let expensive_get_score =
-            |game: Game, player: Player| game.player_tile_coordinates(player).len();
+        let expensive_get_score = |game: Game, player: Player| {
+            u8::try_from(game.player_tile_coordinates(player).len()).unwrap()
+        };
 
         let mut rng = thread_rng();
 

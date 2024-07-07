@@ -110,7 +110,6 @@ impl Coordinates {
 pub struct Tile {
     pub owner: Option<Player>,
     pub color: TileColor,
-    pub coordinates: Coordinates,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -185,15 +184,15 @@ impl<Message> Program<Message> for Grid {
         let x_offset = (bounds.size().width - (8.0 * tile_size)) / 2.0;
         let y_offset = (bounds.size().height - (7.0 * tile_size)) / 2.0;
 
-        for row in *self {
-            for cell in row {
-                let Coordinates { row: i, col: j } = cell.coordinates;
+        for i in 0..Self::ROW_COUNT {
+            for j in 0..Self::COL_COUNT {
+                let color = self[i][j].color;
                 let x = x_offset + j as f32 * tile_size;
                 let y = y_offset + i as f32 * tile_size;
                 let top_left = Point { x, y };
                 let size = Size::new(tile_size, tile_size);
                 let square = Path::rectangle(top_left, size);
-                frame.fill(&square, iced::Color::from(cell.color));
+                frame.fill(&square, iced::Color::from(color));
             }
         }
 
