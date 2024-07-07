@@ -131,8 +131,8 @@ impl Sandbox for Game {
     }
 
     fn update(&mut self, message: Self::Message) {
-        debug_assert_ne!(message, self.player_color(Player::One));
-        debug_assert_ne!(message, self.player_color(Player::Two));
+        assert_ne!(message, self.player_color(Player::One));
+        assert_ne!(message, self.player_color(Player::Two));
 
         let mut new_score = match self.current_player {
             Player::One => self.score.0,
