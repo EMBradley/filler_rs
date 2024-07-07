@@ -118,29 +118,20 @@ impl Sandbox for Game {
         assert_ne!(message, self.player_color(Player::One));
         assert_ne!(message, self.player_color(Player::Two));
 
-        let mut update_stack = self.player_tile_coordinates(self.current_player);
+       for coordinates in self.player_tile_coordinates(self.current_player) {
+            self.grid[coordinates].color = message;
 
-        while let Some(coordinates) = update_stack.pop() {
-            let tile = &mut self.grid[coordinates];
-
-            if tile.owner == Some(self.current_player) {
-                tile.color = message;
-            } else {
-                tile.owner = Some(self.current_player);
+            for neighbor_coordinates in coordinates.neighbors() {
+                let neighbor = &mut self.grid[neighbor_coordinates];
+                if neighbor.color == message && neighbor.owner.is_none() {
+                    neighbor.owner = Some(self.current_player);
+                }
             }
-
-            let neighbors = coordinates.neighbors();
-            let neighbors_to_update = neighbors.iter().copied().filter(|&neighbor_coordinates| {
-                let neighbor = self.grid[neighbor_coordinates];
-                neighbor.color == message && neighbor.owner.is_none()
-            });
-            update_stack.extend(neighbors_to_update);
         }
 
-        let new_score = self.player_tile_coordinates(self.current_player).len();
         self.score = match self.current_player {
-            Player::One => (new_score, self.score.1),
-            Player::Two => (self.score.0, new_score),
+            Player::One => (self.player_score(Player::One), self.score.1),
+            Player::Two => (self.score.0, self.player_score(Player::Two)),
         };
 
         self.current_player = self.current_player.alternate();
