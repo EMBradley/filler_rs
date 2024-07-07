@@ -144,8 +144,17 @@ impl Sandbox for Game {
     }
 
     fn view(&self) -> Element<Self::Message> {
-        let score_board = text(format!("Score: {0} | {1}", self.score.0, self.score.1));
-        let to_play = {
+        let font = {
+            let mut font = font::Font::default();
+            font.weight = font::Weight::Bold;
+            font
+        };
+
+        let score_board = text(format!("Score: {0} | {1}", self.score.0, self.score.1))
+            .size(25.0)
+            .font(font);
+        let info_spacer = Space::new(Length::Fill, Length::Fill);
+        let turn_indicator = {
             let player = match self.current_player {
                 Player::One => "Player 1",
                 Player::Two => "Player 2",
@@ -181,6 +190,7 @@ impl Sandbox for Game {
                 .style(color)
                 .on_press_maybe(message);
             button.into()
+            .spacing(25.0)
         }))
         .align_items(Alignment::Center)
         .spacing(TILE_SIZE * 0.25)
