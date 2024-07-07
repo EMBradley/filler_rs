@@ -175,11 +175,7 @@ impl<Message> Program<Message> for Grid {
 
         let max_tile_width = bounds.size().width / 8.0;
         let max_tile_height = bounds.size().height / 7.0;
-        let tile_size = if max_tile_width < max_tile_height {
-            max_tile_width
-        } else {
-            max_tile_height
-        };
+        let tile_size = max_tile_width.min(max_tile_height);
 
         let x_offset = (bounds.size().width - (8.0 * tile_size)) / 2.0;
         let y_offset = (bounds.size().height - (7.0 * tile_size)) / 2.0;

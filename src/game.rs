@@ -1,12 +1,10 @@
 use super::grid::{Coordinates, Grid, Tile, TileColor};
 use iced::{
     advanced::graphics::core::font,
-    widget::{button::Button, canvas::Canvas, column, row, text, Container, Space},
+    widget::{button::Button, canvas::Canvas, column, responsive, row, text, Space},
     Alignment, Element, Length, Padding, Sandbox,
 };
 use rand::prelude::*;
-
-const TILE_SIZE: f32 = 75.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Player {
@@ -183,36 +181,46 @@ impl Sandbox for Game {
             .height(Length::FillPortion(1))
             .width(Length::Fill);
 
-        let grid = Container::new(
-            Canvas::new(&self.grid)
-                .width(Length::Fill)
-                .height(Length::Fill),
-        )
-        .width(Length::Fill)
-        .height(Length::FillPortion(8))
-        .center_x()
-        .center_y();
+        let grid = Canvas::new(&self.grid)
+            .width(Length::Fill)
+            .height(Length::FillPortion(8));
 
-        let buttons = row(TileColor::ALL.into_iter().map(|color| {
-            let is_enabled = !self.disabled_colors().contains(&color);
-            let message = if is_enabled { Some(color) } else { None };
-            let size = if is_enabled {
-                TILE_SIZE
-            } else {
-                TILE_SIZE * 0.75
-            };
-            let button = Button::new("")
-                .width(size)
-                .height(size)
-                .padding(TILE_SIZE - size)
-                .style(color)
-                .on_press_maybe(message);
-            button.into()
-        }))
-        .align_items(Alignment::Center)
-        .spacing(TILE_SIZE * 0.25)
-        .height(Length::FillPortion(2))
-        .width(Length::Shrink);
+        let buttons = responsive(|size| {
+            let max_tile_width = size.width / 6.0;
+            let max_tile_height = size.height;
+            let tile_size = max_tile_width.min(max_tile_height);
+
+            let total_button_width = (tile_size * 1.25) * 4.0 + (tile_size * 2.0);
+            let spacer_width = (size.width - total_button_width) / 2.0;
+
+            let left_spacer = Space::with_width(spacer_width);
+            let right_spacer = Space::with_width(spacer_width);
+
+            let mut button_row = row![left_spacer]
+                .spacing(tile_size * 0.25)
+                .align_items(Alignment::Center);
+            let buttons = TileColor::ALL.into_iter().map(|color| {
+                let is_enabled = !self.disabled_colors().contains(&color);
+                let message = if is_enabled { Some(color) } else { None };
+                let size = if is_enabled {
+                    tile_size
+                } else {
+                    tile_size * 0.75
+                };
+                let button = Button::new("")
+                    .width(size)
+                    .height(size)
+                    .padding(tile_size - size)
+                    .style(color)
+                    .on_press_maybe(message);
+                button.into()
+            });
+
+            button_row = button_row.extend(buttons);
+            button_row = button_row.push(right_spacer);
+
+            button_row.into()
+        });
 
         column![info, grid, buttons]
             .align_items(Alignment::Center)
