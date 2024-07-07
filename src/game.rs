@@ -118,6 +118,11 @@ impl Sandbox for Game {
         debug_assert_ne!(message, self.player_color(Player::One));
         debug_assert_ne!(message, self.player_color(Player::Two));
 
+        let mut new_score = match self.current_player {
+            Player::One => self.score.0,
+            Player::Two => self.score.1,
+        };
+
         for coordinates in self.player_tile_coordinates(self.current_player) {
             self.grid[coordinates].color = message;
 
@@ -125,13 +130,14 @@ impl Sandbox for Game {
                 let neighbor = &mut self.grid[neighbor_coordinates];
                 if neighbor.color == message && neighbor.owner.is_none() {
                     neighbor.owner = Some(self.current_player);
+                    new_score += 1;
                 }
             }
         }
 
-        self.score = match self.current_player {
-            Player::One => (self.player_score(Player::One), self.score.1),
-            Player::Two => (self.score.0, self.player_score(Player::Two)),
+        match self.current_player {
+            Player::One => self.score.0 = new_score,
+            Player::Two => self.score.1 = new_score,
         };
 
         self.current_player = self.current_player.alternate();
@@ -215,6 +221,31 @@ mod tests {
                         assert_ne!(color, neighbor_color);
                     }
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn test_score_update() {
+        let expensive_get_score =
+            |game: Game, player: Player| game.player_tile_coordinates(player).len();
+
+        let mut rng = thread_rng();
+
+        for _ in 0..25 {
+            let mut game = Game::new();
+            while let GameStatus::Incomplete = game.status() {
+                let disabled_colors = game.disabled_colors();
+                let available_colors = TileColor::ALL
+                    .iter()
+                    .filter(|color| !disabled_colors.contains(color));
+                game.update(*available_colors.choose(&mut rng).unwrap());
+
+                let expected_score = (
+                    expensive_get_score(game, Player::One),
+                    expensive_get_score(game, Player::Two),
+                );
+                assert_eq!(expected_score, game.score);
             }
         }
     }
