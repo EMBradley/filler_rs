@@ -1,7 +1,10 @@
 use super::grid::{Coordinates, Grid, Tile, TileColor};
 use iced::{
     advanced::graphics::core::font,
-    widget::{button::Button, canvas::Canvas, column, responsive, row, text, Space},
+    alignment::Horizontal,
+    widget::{
+        button::Button, canvas::Canvas, column, responsive, row, text, Responsive, Row, Space,
+    },
     Alignment, Element, Length, Padding, Sandbox,
 };
 use rand::prelude::*;
@@ -82,6 +85,83 @@ impl Game {
             GameStatus::Draw
         }
     }
+
+    fn create_info_bar(&self) -> Row<TileColor> {
+        let game_status = self.status();
+
+        let font = {
+            let mut font = font::Font::default();
+            font.weight = font::Weight::Bold;
+            font
+        };
+
+        let spacer = Space::with_width(Length::Fill);
+
+        let score_board = text(format!("Score: {0} | {1}", self.score.0, self.score.1))
+            .size(25.0)
+            .font(font);
+
+        let status_text = {
+            let player = match self.current_player {
+                Player::One => "Player 1",
+                Player::Two => "Player 2",
+            };
+
+            let status_text = match game_status {
+                GameStatus::Incomplete => format!("{player}'s turn"),
+                GameStatus::Draw => "Draw!".to_string(),
+                GameStatus::Won(Player::One) => "Player 1 Wins!".to_string(),
+                GameStatus::Won(Player::Two) => "Player 2 Wins!".to_string(),
+            };
+
+            text(status_text)
+                .font(font)
+                .size(25.0)
+                .height(Length::Fill)
+                .horizontal_alignment(Horizontal::Center)
+        };
+
+        row![score_board, spacer, status_text]
+            .height(Length::FillPortion(1))
+            .width(Length::Fill)
+    }
+
+    fn create_buttons(&self) -> Responsive<TileColor> {
+        responsive(|size| {
+            let max_tile_width = size.width / 6.0;
+            let max_tile_height = size.height;
+            let tile_size = max_tile_width.min(max_tile_height);
+
+            let total_button_width = (tile_size * 1.25) * 4.0 + (tile_size * 2.0);
+            let spacer_width = (size.width - total_button_width) / 2.0;
+
+            let left_spacer = Space::with_width(spacer_width);
+            let right_spacer = Space::with_width(spacer_width);
+
+            let button_row = row![left_spacer]
+                .spacing(tile_size * 0.25)
+                .align_items(Alignment::Center);
+
+            let buttons = TileColor::ALL.into_iter().map(|color| {
+                let is_enabled = !self.disabled_colors().contains(&color);
+                let message = if is_enabled { Some(color) } else { None };
+                let size = if is_enabled {
+                    tile_size
+                } else {
+                    tile_size * 0.75
+                };
+                let button = Button::new("")
+                    .width(size)
+                    .height(size)
+                    .padding(tile_size - size)
+                    .style(color)
+                    .on_press_maybe(message);
+                button.into()
+            });
+
+            button_row.extend(buttons).push(right_spacer).into()
+        })
+    }
 }
 
 impl Sandbox for Game {
@@ -131,8 +211,8 @@ impl Sandbox for Game {
     }
 
     fn update(&mut self, message: Self::Message) {
-        assert_ne!(message, self.player_color(Player::One));
-        assert_ne!(message, self.player_color(Player::Two));
+        debug_assert_ne!(message, self.player_color(Player::One));
+        debug_assert_ne!(message, self.player_color(Player::Two));
 
         let mut new_score = match self.current_player {
             Player::One => self.score.0,
@@ -160,69 +240,15 @@ impl Sandbox for Game {
     }
 
     fn view(&self) -> Element<Self::Message> {
-        let font = {
-            let mut font = font::Font::default();
-            font.weight = font::Weight::Bold;
-            font
-        };
-
-        let score_board = text(format!("Score: {0} | {1}", self.score.0, self.score.1))
-            .size(25.0)
-            .font(font);
-        let info_spacer = Space::new(Length::Fill, Length::Fill);
-        let turn_indicator = {
-            let player = match self.current_player {
-                Player::One => "Player 1",
-                Player::Two => "Player 2",
-            };
-            text(format!("{player}'s turn")).size(25.0).font(font)
-        };
-        let info = row![score_board, info_spacer, turn_indicator]
-            .height(Length::FillPortion(1))
-            .width(Length::Fill);
+        let info_bar = self.create_info_bar();
 
         let grid = Canvas::new(&self.grid)
             .width(Length::Fill)
-            .height(Length::FillPortion(8));
+            .height(Length::FillPortion(10));
 
-        let buttons = responsive(|size| {
-            let max_tile_width = size.width / 6.0;
-            let max_tile_height = size.height;
-            let tile_size = max_tile_width.min(max_tile_height);
+        let buttons = self.create_buttons();
 
-            let total_button_width = (tile_size * 1.25) * 4.0 + (tile_size * 2.0);
-            let spacer_width = (size.width - total_button_width) / 2.0;
-
-            let left_spacer = Space::with_width(spacer_width);
-            let right_spacer = Space::with_width(spacer_width);
-
-            let mut button_row = row![left_spacer]
-                .spacing(tile_size * 0.25)
-                .align_items(Alignment::Center);
-            let buttons = TileColor::ALL.into_iter().map(|color| {
-                let is_enabled = !self.disabled_colors().contains(&color);
-                let message = if is_enabled { Some(color) } else { None };
-                let size = if is_enabled {
-                    tile_size
-                } else {
-                    tile_size * 0.75
-                };
-                let button = Button::new("")
-                    .width(size)
-                    .height(size)
-                    .padding(tile_size - size)
-                    .style(color)
-                    .on_press_maybe(message);
-                button.into()
-            });
-
-            button_row = button_row.extend(buttons);
-            button_row = button_row.push(right_spacer);
-
-            button_row.into()
-        });
-
-        column![info, grid, buttons]
+        column![info_bar, grid, buttons]
             .align_items(Alignment::Center)
             .padding(Padding::from(25.0))
             .spacing(25.0)
