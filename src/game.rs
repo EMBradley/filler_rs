@@ -204,6 +204,10 @@ impl Sandbox for Game {
         "Filler".to_string()
     }
 
+    fn theme(&self) -> iced::Theme {
+        iced::Theme::Dark
+    }
+
     fn new() -> Self {
         // Generate a grid of randomly colored tiles, assigning the bottom left tile to player one
         // and assigning the top right tile to player two
