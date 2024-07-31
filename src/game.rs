@@ -26,7 +26,7 @@ impl Player {
 }
 
 #[derive(Debug, Default, Clone, Copy)]
-enum GameStatus {
+enum Status {
     #[default]
     Incomplete,
     Won(Player),
@@ -34,18 +34,9 @@ enum GameStatus {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GameMessage {
+pub enum Message {
     PlayAgain,
     Move(TileColor),
-}
-
-impl ToString for GameMessage {
-    fn to_string(&self) -> String {
-        match *self {
-            Self::PlayAgain => format!("Play Again"),
-            Self::Move(color) => format!("{color:?}"),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -90,19 +81,19 @@ impl Game {
         ]
     }
 
-    fn status(&self) -> GameStatus {
+    fn status(&self) -> Status {
         if usize::from(self.score.0 + self.score.1) < Grid::ROW_COUNT * Grid::COL_COUNT {
-            GameStatus::Incomplete
+            Status::Incomplete
         } else if self.score.0 > self.score.1 {
-            GameStatus::Won(Player::One)
+            Status::Won(Player::One)
         } else if self.score.0 < self.score.1 {
-            GameStatus::Won(Player::Two)
+            Status::Won(Player::Two)
         } else {
-            GameStatus::Draw
+            Status::Draw
         }
     }
 
-    fn create_info_bar(&self) -> Row<GameMessage> {
+    fn create_info_bar(&self) -> Row<Message> {
         let game_status = self.status();
 
         let font = {
@@ -111,10 +102,10 @@ impl Game {
             font
         };
 
-        let middle = if let GameStatus::Incomplete = game_status {
+        let middle = if let Status::Incomplete = game_status {
             Element::from(Space::with_width(Length::Fill))
         } else {
-            let reset_button = Button::new("Play Again").on_press(GameMessage::PlayAgain);
+            let reset_button = Button::new("Play Again").on_press(Message::PlayAgain);
             Element::from(
                 Container::new(reset_button)
                     .width(Length::Fill)
@@ -134,10 +125,10 @@ impl Game {
             };
 
             let status_text = match game_status {
-                GameStatus::Incomplete => format!("{player}'s turn"),
-                GameStatus::Draw => "Draw!".to_string(),
-                GameStatus::Won(Player::One) => "Player 1 Wins!".to_string(),
-                GameStatus::Won(Player::Two) => "Player 2 Wins!".to_string(),
+                Status::Incomplete => format!("{player}'s turn"),
+                Status::Draw => "Draw!".to_string(),
+                Status::Won(Player::One) => "Player 1 Wins!".to_string(),
+                Status::Won(Player::Two) => "Player 2 Wins!".to_string(),
             };
 
             text(status_text)
@@ -153,9 +144,9 @@ impl Game {
             .width(Length::Fill)
     }
 
-    fn create_buttons(&self) -> Responsive<GameMessage> {
+    fn create_buttons(&self) -> Responsive<Message> {
         responsive(|size| {
-            let game_in_progress = matches![self.status(), GameStatus::Incomplete];
+            let game_in_progress = matches![self.status(), Status::Incomplete];
             let max_tile_width = size.width / 6.0;
             let max_tile_height = size.height;
             let tile_size = max_tile_width.min(max_tile_height);
@@ -183,7 +174,7 @@ impl Game {
             let buttons = TileColor::ALL.into_iter().map(|color| {
                 let is_enabled = game_in_progress && !self.disabled_colors().contains(&color);
                 let message = if is_enabled {
-                    Some(GameMessage::Move(color))
+                    Some(Message::Move(color))
                 } else {
                     None
                 };
@@ -207,7 +198,11 @@ impl Game {
 }
 
 impl Sandbox for Game {
-    type Message = GameMessage;
+    type Message = Message;
+
+    fn title(&self) -> String {
+        "Filler".to_string()
+    }
 
     fn new() -> Self {
         // Generate a grid of randomly colored tiles, assigning the bottom left tile to player one
@@ -248,12 +243,8 @@ impl Sandbox for Game {
         }
     }
 
-    fn title(&self) -> String {
-        "Filler".to_string()
-    }
-
     fn update(&mut self, message: Self::Message) {
-        let GameMessage::Move(color) = message else {
+        let Message::Move(color) = message else {
             *self = Self::new();
             return;
         };
@@ -305,7 +296,7 @@ impl Sandbox for Game {
 
 #[cfg(test)]
 mod tests {
-    use super::{Coordinates, Game, GameMessage, GameStatus, Grid, Player, Sandbox, TileColor};
+    use super::{Coordinates, Game, Grid, Message, Player, Sandbox, Status, TileColor};
     use rand::prelude::*;
 
     #[test]
@@ -346,14 +337,12 @@ mod tests {
 
         for _ in 0..25 {
             let mut game = Game::new();
-            while let GameStatus::Incomplete = game.status() {
+            while let Status::Incomplete = game.status() {
                 let disabled_colors = game.disabled_colors();
                 let available_colors = TileColor::ALL
                     .iter()
                     .filter(|color| !disabled_colors.contains(color));
-                game.update(GameMessage::Move(
-                    *available_colors.choose(&mut rng).unwrap(),
-                ));
+                game.update(Message::Move(*available_colors.choose(&mut rng).unwrap()));
 
                 let expected_score = (
                     expensive_get_score(game, Player::One),
